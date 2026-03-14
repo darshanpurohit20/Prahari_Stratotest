@@ -26,7 +26,7 @@ st.markdown("""
     }
     /* Hide top header bar & standard padding */
     header[data-testid="stHeader"] { background: rgba(8,12,24,0.92) !important; backdrop-filter: blur(16px); }
-    .css-18e3th9, .block-container { padding-top: 2rem !important; }
+    .css-18e3th9, .block-container { padding-top: 5rem !important; }
     
     /* Typography */
     h1, h2, h3 { font-family: 'Space Mono', monospace !important; font-weight: 700 !important; }
