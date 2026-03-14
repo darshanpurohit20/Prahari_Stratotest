@@ -12,7 +12,7 @@
 
 <div align="center">
 
-# ⚔️ TEAM PRAHARI ⚔️
+#  TEAM PRAHARI 
 ```
 ╔══════════════════════════════════════════════════════╗
 ║              Built by three builders.                ║
