@@ -86,70 +86,70 @@ User Natural Language Input
          │
          ▼
 ┌─────────────────────────────┐
-│    TALKBACK AGENT (NEW)      │  ← Validates query completeness
-│                              │    Uses Pinecone RAG for smart defaults
-│  Checks:                     │    Asks user only if RAG can't fill gaps
-│  • asset_name                │
-│  • timeframe                 │
-│  • start_date / end_date     │
-│  • strategy_hint             │
+│    TALKBACK AGENT (NEW)     │  ← Validates query completeness
+│                             │    Uses Pinecone RAG for smart defaults
+│  Checks:                    │    Asks user only if RAG can't fill gaps
+│  • asset_name               │
+│  • timeframe                │
+│  • start_date / end_date    │
+│  • strategy_hint            │
 └────────┬────────────────────┘
          │ enriched, complete query
          ▼
 ┌─────────────────────────────┐
-│   STRATEGY AGENT             │  ← LangChain + Claude + Tools
-│                              │    Writes Python strategy code
-│  Tools:                      │    Self-corrects syntax errors
-│  • validate_syntax           │    Loops until sandbox passes
-│  • run_sandbox_test          │
+│      STRATEGY AGENT         │  ← LangChain + Claude + Tools
+│                             │    Writes Python strategy code
+│  Tools:                     │    Self-corrects syntax errors
+│  • validate_syntax          │    Loops until sandbox passes
+│  • run_sandbox_test         │
 └────────┬────────────────────┘
          │ validated strategy code (Python string)
          ▼
 ┌─────────────────────────────┐
-│  VALIDATION AGENT            │  ← Separate LLM call
-│                              │    Checks lookahead bias
-│  Checks:                     │    Minimum trade count
-│  • lookahead bias            │    Sharpe sanity check
-│  • trade frequency           │    Sends PASS or FAIL+reason
-│  • Sharpe sanity             │    back to Strategy Agent
+│     VALIDATION AGENT        │  ← Separate LLM call
+│                             │    Checks lookahead bias
+│  Checks:                    │    Minimum trade count
+│  • lookahead bias           │    Sharpe sanity check
+│  • trade frequency          │    Sends PASS or FAIL+reason
+│  • Sharpe sanity            │    back to Strategy Agent
 └────────┬────────────────────┘
          │ PASS
          ▼
 ┌─────────────────────────────┐
-│   BACKTEST ENGINE            │  ← Pure Python, no LLM
-│                              │    exec() the strategy code
-│  Applies:                    │    Apply friction costs
-│  • slippage                  │    Calculate all metrics
-│  • commissions               │
-│  • spread                    │
+│   BACKTEST ENGINE           │  ← Pure Python, no LLM
+│                             │    exec() the strategy code
+│  Applies:                   │    Apply friction costs
+│  • slippage                 │    Calculate all metrics
+│  • commissions              │
+│  • spread                   │
 └────────┬────────────────────┘
          │ metrics dict
          ▼
 ┌─────────────────────────────┐
-│ OPTIMIZATION AGENT           │  ← LangChain + Claude + Tools
-│                              │    Goal: Sharpe > 1.0, DD < 20%
-│  Tools:                      │    ONE tweak per iteration
-│  • tweak_parameter           │    Max 4 iterations
-│  • run_full_backtest         │    Returns best variant
+│    OPTIMIZATION AGENT       │  ← LangChain + Claude + Tools
+│                             │    Goal: Sharpe > 1.0, DD < 20%
+│  Tools:                     │    ONE tweak per iteration
+│  • tweak_parameter          │    Max 4 iterations
+│  • run_full_backtes         │    Returns best variant
 └────────┬────────────────────┘
          │ best strategy + all iteration metrics
          ▼
 ┌─────────────────────────────┐
-│   TEARSHEET + UI             │  ← Plotly charts + Streamlit
-│                              │    Equity curve
-│  Shows:                      │    Drawdown chart
-│  • Original vs Best          │    Monthly returns heatmap
-│  • Iteration table           │    Agent reasoning log
-│  • Explain button            │
+│      TEARSHEET + UI         │  ← Plotly charts + Streamlit
+│                             │    Equity curve
+│   Shows:                    │    Drawdown chart
+│  • Original vs Best         │    Monthly returns heatmap
+│  • Iteration table          │    Agent reasoning log
+│  • Explain button           │
 └─────────────────────────────┘
          │ on-demand
          ▼
 ┌─────────────────────────────┐
-│   EXPLAIN AGENT              │  ← Single LLM call, no tools
-│                              │    Analyzes bad periods
-│  Answers:                    │    Explains WHY it lost money
-│  • "Why 2022 loss?"          │    Suggests structural fixes
-│  • "What kills it?"          │
+│     EXPLAIN AGENT           │  ← Single LLM call, no tools
+│                             │    Analyzes bad periods
+│  Answers:                   │    Explains WHY it lost money
+│  • "Why 2022 loss?"         │    Suggests structural fixes
+│  • "What kills it?"         │
 └─────────────────────────────┘
 ```
 
@@ -164,6 +164,7 @@ BEFORE (Old Flow):
 AFTER (New Flow):
   User Query → [Talkback Agent] → [RAG Layer] → [Validation Gate]
                                                       │
+                                                      ▼ 
                                           ┌───────────┴───────────┐
                                           ▼                       ▼
                                    [Complete Query]        [Incomplete Query]
@@ -174,8 +175,10 @@ AFTER (New Flow):
                                                       ▼
                                                Deep Agent Controller
                                                       │
+                                                      ▼
                                                Backtest Engine
                                                       │
+                                                      ▼
                                         [Index Result → Pinecone RAG]
 ```
 
