@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+yfinance
+pandas
+numpy
+groq
+ta
+python-dotenv
+httpx
+pydantic
+requests
+vectorbt
+tiingo
+json
+google-genai
