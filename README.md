@@ -8,13 +8,33 @@
 
 ---
 
-## 👥 Team Prahari
+---
 
-| Name | GitHub |
-|---|---|
-| Chandan Singh | [@chandan22468](https://github.com/chandan22468) |
-| Darshan Purohit | [@darshanpurohit20](https://github.com/darshanpurohit20) |
-| Harsh Redasani | [@redasaniharsh](https://github.com/redasaniharsh) |
+<div align="center">
+
+# ⚔️ TEAM PRAHARI ⚔️
+```
+╔══════════════════════════════════════════════════════╗
+║              Built by three builders.                ║
+║           Powered by one obsession.                  ║
+╚══════════════════════════════════════════════════════╝
+```
+
+<br/>
+
+| &nbsp;&nbsp;&nbsp;🧑‍💻&nbsp;&nbsp;&nbsp; | Builder | &nbsp;&nbsp;&nbsp;GitHub&nbsp;&nbsp;&nbsp; |
+|:---:|:---|:---:|
+| ![](https://img.shields.io/badge/-●-ff6b6b?style=flat-square) | **Chandan Singh** | [![GitHub](https://img.shields.io/badge/chandan22468-%23181717?style=for-the-badge&logo=github)](https://github.com/chandan22468) |
+| ![](https://img.shields.io/badge/-●-ffd93d?style=flat-square) | **Darshan Purohit** | [![GitHub](https://img.shields.io/badge/darshanpurohit20-%23181717?style=for-the-badge&logo=github)](https://github.com/darshanpurohit20) |
+| ![](https://img.shields.io/badge/-●-6bcb77?style=flat-square) | **Harsh Redasani** | [![GitHub](https://img.shields.io/badge/redasaniharsh-%23181717?style=for-the-badge&logo=github)](https://github.com/redasaniharsh) |
+
+<br/>
+
+![](https://img.shields.io/badge/Hackathon-2026-blueviolet?style=for-the-badge)
+![](https://img.shields.io/badge/Made%20with-Claude%20+%20Gemini%20+%20Pinecone-black?style=for-the-badge)
+![](https://img.shields.io/badge/India-🇮🇳-orange?style=for-the-badge)
+
+</div>
 
 ---
 
@@ -208,8 +228,8 @@ Auto-fill threshold: if RAG confidence score > 0.85, the field is filled automat
 ### 1. Clone and set up
 
 ```bash
-git clone <your-repo>
-cd prahari
+git clone https://github.com/darshanpurohit20/Prahari_Stratotest
+cd Prahari_Stratotest
 cp .env.example .env
 ```
 
