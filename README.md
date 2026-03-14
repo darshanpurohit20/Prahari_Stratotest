@@ -47,6 +47,11 @@
 
 ---
 
+## 📸 Preview
+
+![StratoTest UI](https://obnoxious-rose-uludgrpmvp.edgeone.app/image.png)
+
+---
 ## 🧠 What is StratoTest?
 
 StratoTest is a **multi-agent AI backtesting system**. A user types a trading strategy in plain English. A pipeline of autonomous AI agents converts that description into executable Python code, validates it, runs a realistic historical simulation with friction modelling, generates a performance tearsheet, and then autonomously optimizes the strategy — all without any further user input.
