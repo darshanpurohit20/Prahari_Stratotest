@@ -13,3 +13,4 @@ vectorbt
 tiingo
 google-genai
 pyarrow
+streamlit
