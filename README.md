@@ -263,7 +263,7 @@ python scripts/seed_pinecone.py
 ### 5. Start the FastAPI backend
 
 ```bash
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
 ### 6. Start the Streamlit frontend (new terminal)
