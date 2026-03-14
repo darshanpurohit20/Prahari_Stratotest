@@ -21,7 +21,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Performance Caching ──────────────────────────────────────
-LLM_CACHE_DIR = os.path.join(os.getcwd(), ".cache", "llm")
+# Hugging Face Spaces allows writing only to /tmp
+LLM_CACHE_DIR = "/tmp/prahari_cache/llm"
+
 os.makedirs(LLM_CACHE_DIR, exist_ok=True)
 
 def _get_cache_path(key_data: str, prefix: str) -> str:
