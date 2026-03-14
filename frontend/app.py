@@ -123,85 +123,105 @@ def render_drawdown(data):
 # ══════════════════════════════════════════════════════════════
 # APP STATE
 # ══════════════════════════════════════════════════════════════
-if "page" not in st.session_state:
-    st.session_state.page = "landing"
-if "market" not in st.session_state:
-    st.session_state.market = "Crypto"
-if "symbol" not in st.session_state:
-    st.session_state.symbol = "BTC-USD"
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "prefill" not in st.session_state:
     st.session_state.prefill = ""
 
-# Keep a top banner consistently
+# Top banner
 st.markdown("<div class='logo-hdr'>PRAHARI<span>.</span>AI ⚡</div>", unsafe_allow_html=True)
 st.divider()
 
 # ══════════════════════════════════════════════════════════════
-# PAGE: LANDING (Matches HTML Landing + Search)
+# DASHBOARD — single page, no landing form
 # ══════════════════════════════════════════════════════════════
-if st.session_state.page == "landing":
-    
-    st.markdown('<div class="hero-title">Backtest any strategy<br>in <span>plain English</span></div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">Describe your trading strategy, pick a market, and get a professional performance tearsheet in seconds. No coding required.</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-title">Backtest any strategy<br>in <span>plain English</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-subtitle">Describe your strategy — ticker, market & settings are detected automatically by the AI.</div>', unsafe_allow_html=True)
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown("<div class='metric-card'><div class='metric-value'>2.8M+</div><div class='metric-label'>Backtests</div></div>", unsafe_allow_html=True)
-    c2.markdown("<div class='metric-card'><div class='metric-value'>300+</div><div class='metric-label'>Instruments</div></div>", unsafe_allow_html=True)
-    c3.markdown("<div class='metric-card'><div class='metric-value'><4s</div><div class='metric-label'>Avg Time</div></div>", unsafe_allow_html=True)
-    c4.markdown("<div class='metric-card'><div class='metric-value'>10Y</div><div class='metric-label'>Data Depth</div></div>", unsafe_allow_html=True)
-    
-    st.write("")
-    st.write("")
-    
-    st.markdown("### 1. Select Market & Asset")
-    colA, colB = st.columns(2)
-    with colA:
-        market = st.selectbox("Market Category", ["Crypto", "Indian Equities", "Forex Base"], index=0)
-    with colB:
-        if market == "Crypto":
-            symbol = st.selectbox("Asset Symbol", ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD"])
-        elif market == "Indian Equities":
-            symbol = st.selectbox("Asset Symbol", ["RELIANCE", "TCS", "NIFTY50", "HDFCBANK", "INFY"])
-        else:
-            symbol = st.selectbox("Asset Symbol", ["EUR-USD", "GBP-USD", "USD-JPY", "AUD-USD"])
-            
-    st.write("")
-    
-    if st.button("🚀 Enter Dashboard & Start Chat", use_container_width=True):
-        st.session_state.market = market
-        st.session_state.symbol = symbol
-        st.session_state.page = "dashboard"
-        st.rerun()
+c1, c2, c3, c4 = st.columns(4)
+c1.markdown("<div class='metric-card'><div class='metric-value'>2.8M+</div><div class='metric-label'>Backtests</div></div>", unsafe_allow_html=True)
+c2.markdown("<div class='metric-card'><div class='metric-value'>300+</div><div class='metric-label'>Instruments</div></div>", unsafe_allow_html=True)
+c3.markdown("<div class='metric-card'><div class='metric-value'><4s</div><div class='metric-label'>Avg Time</div></div>", unsafe_allow_html=True)
+c4.markdown("<div class='metric-card'><div class='metric-value'>10Y</div><div class='metric-label'>Data Depth</div></div>", unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: DASHBOARD (The Streamlit Chat + Charts Core)
-# ══════════════════════════════════════════════════════════════
-elif st.session_state.page == "dashboard":
-    
-    l_col, r_col = st.columns([1, 6])
-    with l_col:
-        if st.button("← Back"):
-            st.session_state.page = "landing"
-            st.rerun()
-    with r_col:
-        st.markdown(f"### Trade Dashboard: `{st.session_state.symbol}` ({st.session_state.market})")
+st.write("")
 
+if True:
     st.sidebar.markdown("### 🛠️ Controls")
     if st.sidebar.button("🗑️ Clear Chat Session", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
         
     st.sidebar.divider()
+    st.sidebar.markdown("### 🧩 Universal DSL")
+    st.sidebar.caption("Indicators: ma, rsi, sma, close, atr, fvg, ob")
+    st.sidebar.caption("Logic: AND/OR with gt, lt, gte, lte, eq, crosses_above, crosses_below")
+
+    st.sidebar.divider()
     st.sidebar.markdown("### 🚀 Fast Presets")
     examples = [
-        ("MA Crossover", "Buy when 50 EMA crosses above 200 EMA, SL below last swing low, 1:2 RR"),
-        ("RSI Reversal", "Buy when RSI drops below 30 and bounces back, SL below swing low, 1:2 RR")
+        {
+            "label": "MA Crossover",
+            "prompt": "Backtest BTC where EMA 50 crosses above EMA 200, stop loss swing_low lookback 5, take profit 1:2",
+            "description": "EMA 50/200 bullish crossover with swing-low stop and 1:2 risk-reward.",
+        },
+        {
+            "label": "RSI Reversal",
+            "prompt": "Backtest Nifty: buy when RSI 14 is below 30 and then rises, stop loss swing_low, take profit 1:2",
+            "description": "RSI oversold reversal setup with confirmation and fixed 1:2 target.",
+        },
+        {
+            "label": "Fibonacci Pullback",
+            "prompt": "Backtest ETH bullish pullback to Fibonacci 0.618 with trend continuation, stop loss swing_low, take profit 1:2",
+            "description": "Trend continuation entry on 0.618 pullback zone.",
+        },
+        {
+            "label": "SR Bounce",
+            "prompt": "Backtest RELIANCE support bounce setup near recent support with bullish close confirmation",
+            "description": "Support touch-and-bounce with bullish close confirmation.",
+        },
+        {
+            "label": "Breakout Retest",
+            "prompt": "Backtest Nifty breakout and retest strategy: resistance break then successful retest and continuation",
+            "description": "Breakout above resistance followed by retest continuation entry.",
+        },
     ]
-    for label, example in examples:
-        if st.sidebar.button(label, use_container_width=True):
-            st.session_state.prefill = example
+    for item in examples:
+        if st.sidebar.button(item["label"], use_container_width=True, help=item["description"]):
+            st.session_state.prefill = item["prompt"]
+
+    st.sidebar.divider()
+    st.sidebar.markdown("### 🧠 Direct Analyses")
+    direct_analyses = [
+        {
+            "label": "HHHL Trend",
+            "prompt": "Analyze and backtest BTC higher-high higher-low trend continuation logic on 1h timeframe",
+            "description": "Trend-structure analysis using higher highs and higher lows.",
+        },
+        {
+            "label": "Order Block",
+            "prompt": "Analyze and backtest Gold bullish order block entry when price revisits OB and closes strong",
+            "description": "SMC order block revisit with bullish confirmation.",
+        },
+        {
+            "label": "FVG Fill",
+            "prompt": "Analyze and backtest ETH bullish fair value gap entry with confirmation candle",
+            "description": "Fair Value Gap fill-and-go setup with confirmation.",
+        },
+        {
+            "label": "CHoCH",
+            "prompt": "Analyze and backtest Nifty bullish CHoCH setup after downtrend structure break",
+            "description": "Change-of-character bullish reversal after bearish structure break.",
+        },
+        {
+            "label": "BOS Pullback",
+            "prompt": "Analyze and backtest BTC break of structure then pullback continuation entry",
+            "description": "Break of structure followed by pullback continuation setup.",
+        },
+    ]
+    for item in direct_analyses:
+        if st.sidebar.button(item["label"], use_container_width=True, help=item["description"]):
+            st.session_state.prefill = item["prompt"]
 
     # Display Chat
     for msg in st.session_state.messages:
@@ -228,13 +248,13 @@ elif st.session_state.page == "dashboard":
                     full_input = "\n".join([f"{m['role']}: {m['content']}" for m in history])
                     
                     bt_resp = requests.post(f"{API_URL}/backtest", json={
-                        "user_input": full_input,
-                        "ticker": st.session_state.symbol,
-                        "timeframe": "1h",
-                        "period": "1y",
-                        "initial_capital": 100000,
-                        "market": st.session_state.market.lower().replace(" ", "_")
-                    }, timeout=120)
+                            "user_input": full_input,
+                            "ticker": "AUTO",
+                            "timeframe": "1h",
+                            "period": "1y",
+                            "initial_capital": 100000,
+                            "market": "india_equity"
+                        }, timeout=120)
                     
                     if bt_resp.status_code != 200:
                         st.error(f"Backtest failed: {bt_resp.json().get('detail')}")
