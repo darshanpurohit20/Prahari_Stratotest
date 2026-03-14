@@ -16,7 +16,7 @@
 ```
 ╔══════════════════════════════════════════════════════╗
 ║              Built by three builders.                ║
-║           Powered by one obsession.                  ║
+║             Powered by one obsession.                ║
 ╚══════════════════════════════════════════════════════╝
 ```
 
