@@ -120,6 +120,69 @@ def render_drawdown(data):
     fig.update_layout(template="plotly_dark", height=350, title="Drawdown Curve", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, use_container_width=True)
 
+def render_trade_log(data):
+    trades = data.get("trades", [])
+    if not trades:
+        st.info("No trades generated")
+        return
+
+    df = pd.DataFrame(trades)
+    cols = ["trade_number", "entry_time", "exit_time", "entry_price", "exit_price", "sl_price", "tp_price", "result", "pnl", "rr_achieved"]
+    available = [c for c in cols if c in df.columns]
+    st.dataframe(df[available], use_container_width=True)
+
+def render_monte_carlo(data):
+    vbt = data.get("vbt_analytics")
+    if not vbt or not vbt.get("monte_carlo"):
+        st.info("No Monte Carlo simulation data available")
+        return
+
+    mc = vbt["monte_carlo"]
+    p10, p50, p90 = mc["p10"], mc["p50"], mc["p90"]
+    steps = list(range(len(p50)))
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=steps + steps[::-1],
+        y=p90 + p10[::-1],
+        fill="toself",
+        fillcolor="rgba(0,229,160,0.1)",
+        line=dict(color="rgba(255,255,255,0)"),
+        hoverinfo="skip",
+        showlegend=False,
+        name="P10-P90 Range"
+    ))
+    fig.add_trace(go.Scatter(x=steps, y=p50, line=dict(color="#00e5a0", width=3), name="P50 (Median)"))
+    fig.add_trace(go.Scatter(x=steps, y=p90, line=dict(color="#00e5a0", width=1, dash="dot"), name="P90 (Best)"))
+    fig.add_trace(go.Scatter(x=steps, y=p10, line=dict(color="#ff4560", width=1, dash="dot"), name="P10 (Worst)"))
+
+    fig.update_layout(
+        template="plotly_dark",
+        height=400,
+        title=f"Monte Carlo Simulation ({mc['n_sims']} iterations)",
+        xaxis_title="Steps",
+        yaxis_title="Projected Capital"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def render_vbt_metrics(data):
+    vbt = data.get("vbt_analytics")
+    if not vbt:
+        return
+
+    st.markdown("### Institutional Analytics (vectorbt)")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Sortino Ratio", vbt.get("sortino_ratio") or "0.0")
+    c2.metric("Profit Factor", vbt.get("profit_factor") or "0.0")
+    c3.metric("Expectancy", f"{vbt.get('expectancy', 0):,.2f}")
+    c4.metric("Avg Duration", f"{vbt.get('avg_trade_duration', 0)} bars")
+
+    b1, b2, b3, b4 = st.columns(4)
+    b1.metric("Recovery Factor", vbt.get("recovery_factor") or "0.0")
+    b2.metric("Max DD % (vbt)", f"{vbt.get('max_drawdown_pct', 0)}%")
+    b3.metric("Max DD Duration", f"{vbt.get('max_dd_duration', 0)} bars")
+    b4.metric("Omega Ratio", vbt.get("omega_ratio") or "0.0")
+
 # ══════════════════════════════════════════════════════════════
 # APP STATE
 # ══════════════════════════════════════════════════════════════
@@ -127,6 +190,13 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "prefill" not in st.session_state:
     st.session_state.prefill = ""
+if "context_asset" not in st.session_state:
+    st.session_state.context_asset = "Nifty 50"
+
+
+def build_context_prompt(template: str) -> str:
+    asset = st.session_state.get("context_asset", "Nifty 50")
+    return template.format(asset=asset)
 
 # Top banner
 st.markdown("<div class='logo-hdr'>PRAHARI<span>.</span>AI ⚡</div>", unsafe_allow_html=True)
@@ -162,66 +232,66 @@ if True:
     examples = [
         {
             "label": "MA Crossover",
-            "prompt": "Backtest BTC where EMA 50 crosses above EMA 200, stop loss swing_low lookback 5, take profit 1:2",
+            "prompt": "Backtest {asset} where EMA 50 crosses above EMA 200, stop loss swing_low lookback 5, take profit 1:2",
             "description": "EMA 50/200 bullish crossover with swing-low stop and 1:2 risk-reward.",
         },
         {
             "label": "RSI Reversal",
-            "prompt": "Backtest Nifty: buy when RSI 14 is below 30 and then rises, stop loss swing_low, take profit 1:2",
+            "prompt": "Backtest {asset}: buy when RSI 14 is below 30 and then rises, stop loss swing_low, take profit 1:2",
             "description": "RSI oversold reversal setup with confirmation and fixed 1:2 target.",
         },
         {
             "label": "Fibonacci Pullback",
-            "prompt": "Backtest ETH bullish pullback to Fibonacci 0.618 with trend continuation, stop loss swing_low, take profit 1:2",
+            "prompt": "Backtest {asset} bullish pullback to Fibonacci 0.618 with trend continuation, stop loss swing_low, take profit 1:2",
             "description": "Trend continuation entry on 0.618 pullback zone.",
         },
         {
             "label": "SR Bounce",
-            "prompt": "Backtest RELIANCE support bounce setup near recent support with bullish close confirmation",
+            "prompt": "Backtest {asset} support bounce setup near recent support with bullish close confirmation",
             "description": "Support touch-and-bounce with bullish close confirmation.",
         },
         {
             "label": "Breakout Retest",
-            "prompt": "Backtest Nifty breakout and retest strategy: resistance break then successful retest and continuation",
+            "prompt": "Backtest {asset} breakout and retest strategy: resistance break then successful retest and continuation",
             "description": "Breakout above resistance followed by retest continuation entry.",
         },
     ]
     for item in examples:
         if st.sidebar.button(item["label"], use_container_width=True, help=item["description"]):
-            st.session_state.prefill = item["prompt"]
+            st.session_state.prefill = build_context_prompt(item["prompt"])
 
     st.sidebar.divider()
     st.sidebar.markdown("### 🧠 Direct Analyses")
     direct_analyses = [
         {
             "label": "HHHL Trend",
-            "prompt": "Analyze and backtest BTC higher-high higher-low trend continuation logic on 1h timeframe",
+            "prompt": "Analyze and backtest {asset} higher-high higher-low trend continuation logic on 1h timeframe",
             "description": "Trend-structure analysis using higher highs and higher lows.",
         },
         {
             "label": "Order Block",
-            "prompt": "Analyze and backtest Gold bullish order block entry when price revisits OB and closes strong",
+            "prompt": "Analyze and backtest {asset} bullish order block entry when price revisits OB and closes strong",
             "description": "SMC order block revisit with bullish confirmation.",
         },
         {
             "label": "FVG Fill",
-            "prompt": "Analyze and backtest ETH bullish fair value gap entry with confirmation candle",
+            "prompt": "Analyze and backtest {asset} bullish fair value gap entry with confirmation candle",
             "description": "Fair Value Gap fill-and-go setup with confirmation.",
         },
         {
             "label": "CHoCH",
-            "prompt": "Analyze and backtest Nifty bullish CHoCH setup after downtrend structure break",
+            "prompt": "Analyze and backtest {asset} bullish CHoCH setup after downtrend structure break",
             "description": "Change-of-character bullish reversal after bearish structure break.",
         },
         {
             "label": "BOS Pullback",
-            "prompt": "Analyze and backtest BTC break of structure then pullback continuation entry",
+            "prompt": "Analyze and backtest {asset} break of structure then pullback continuation entry",
             "description": "Break of structure followed by pullback continuation setup.",
         },
     ]
     for item in direct_analyses:
         if st.sidebar.button(item["label"], use_container_width=True, help=item["description"]):
-            st.session_state.prefill = item["prompt"]
+            st.session_state.prefill = build_context_prompt(item["prompt"])
 
     # Display Chat
     for msg in st.session_state.messages:
@@ -260,6 +330,7 @@ if True:
                         st.error(f"Backtest failed: {bt_resp.json().get('detail')}")
                         st.stop()
                     data = bt_resp.json()
+                    st.session_state.context_asset = data.get("ticker_name") or data.get("ticker") or st.session_state.context_asset
                     
                     if data.get("clarification_needed"):
                         st.session_state.messages.append({"role": "assistant", "content": data['question']})
@@ -272,9 +343,52 @@ if True:
             if not data.get("metrics"):
                 st.info("No stats. Enter refinement.")
                 st.stop()
-                
-            # Key metrics header
+
             m = data["metrics"]
+
+            # Warnings
+            for w in data.get("warnings", []):
+                st.warning(w)
+
+            # Confidence badge
+            conf = data.get("confidence", "medium")
+            conf_color = {"high": "Green", "medium": "Orange", "low": "Red"}.get(conf, "Gray")
+            st.markdown(f"<span style='color:{conf_color}'>Confidence:</span> {data.get('confidence_reason', 'Analysis complete')}", unsafe_allow_html=True)
+
+            # Market intelligence
+            if data.get("market_regime"):
+                st.markdown(f"""
+                <div style="background-color: #0b132b; border: 1px solid #1c2541; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <span style="color: #5bc0be; font-weight: bold; letter-spacing: 1px;">AI MARKET INTELLIGENCE</span><br/>
+                    <span style="color: #e4e8f5; font-size: 1.05em;">{data['market_regime']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # AI Strategist Insight
+            if data.get("ai_insight"):
+                st.markdown(f"""
+                <div style="background-color: #1e1e1e; border-left: 5px solid #00d4ff; padding: 16px; border-radius: 10px; margin-bottom: 20px;">
+                    <h4 style='margin-top:0; color:#00d4ff;'>Strategist's Take</h4>
+                    <p style='color:#e0e0e0; font-size: 1.05em;'>\"{data['ai_insight']}\"</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Optimization comparison
+            if data.get("optimization_results"):
+                opt = data["optimization_results"]
+                st.markdown(f"""
+                <div style="background-color: #0d1b2a; border: 1px solid #415a77; padding: 16px; border-radius: 10px; margin-bottom: 20px;">
+                    <h4 style='margin-top:0; color:#e0e1dd;'>Agent Optimization Found</h4>
+                    <p style='color:#e0e1dd;'>{data.get("optimization_summary", "Better parameters detected.")}</p>
+                    <div style="display: flex; gap: 18px; align-items: center;">
+                        <div><span style="color:#778da9;">Original Win Rate</span><br/><span style="font-size: 1.3em; font-weight: bold; color:#e0e0e0;">{m.get('win_rate')}%</span></div>
+                        <div style="font-size: 1.8em; color:#415a77;">→</div>
+                        <div><span style="color:#1b4332;">Optimized Win Rate</span><br/><span style="font-size: 1.3em; font-weight: bold; color:#2d6a4f;">{opt.get('win_rate', 0)}%</span></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Key metrics header
             st.markdown("### 📊 Performance Tearsheet")
             c1, c2, c3, c4 = st.columns(4)
             c1.markdown(f"<div class='metric-card' style='border-color: #00e5a0;'><div class='metric-value' style='color:#00e5a0;'>{m.get('total_return_pct', 0)}%</div><div class='metric-label'>Total Return</div></div>", unsafe_allow_html=True)
@@ -282,16 +396,43 @@ if True:
             c3.markdown(f"<div class='metric-card' style='border-color: #ff4560;'><div class='metric-value' style='color:#ff4560;'>{m.get('max_drawdown_pct', 0)}%</div><div class='metric-label'>Max Drawdown</div></div>", unsafe_allow_html=True)
             c4.markdown(f"<div class='metric-card' style='border-color: #f59e0b;'><div class='metric-value' style='color:#f59e0b;'>{m.get('win_rate', 0)}%</div><div class='metric-label'>Win Rate</div></div>", unsafe_allow_html=True)
 
+            d1, d2, d3, d4 = st.columns(4)
+            d1.markdown(f"<div class='metric-card'><div class='metric-value'>{m.get('total_trades', 0)}</div><div class='metric-label'>Total Trades</div></div>", unsafe_allow_html=True)
+            d2.markdown(f"<div class='metric-card'><div class='metric-value'>{m.get('annual_return_pct', 0)}%</div><div class='metric-label'>Annual Return</div></div>", unsafe_allow_html=True)
+            d3.markdown(f"<div class='metric-card'><div class='metric-value'>{m.get('profit_factor', 0)}</div><div class='metric-label'>Profit Factor</div></div>", unsafe_allow_html=True)
+            d4.markdown(f"<div class='metric-card'><div class='metric-value'>{m.get('avg_rr_achieved', 0)}</div><div class='metric-label'>Avg RR</div></div>", unsafe_allow_html=True)
+
             st.write("")
-            tab1, tab2, tab3 = st.tabs(["📈 Price & Sub-Charts", "💰 Equity & Risk", "📋 Trade Log"])
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Price & Sub-Charts", "💰 Equity & Risk", "📉 Drawdown", "📋 Trade Log", "🎲 Risk Analysis"])
             with tab1: render_price_chart(data)
-            with tab2: 
-                render_equity_curve(data)
-                render_drawdown(data)
-            with tab3:
-                df = pd.DataFrame(data["trades"])
-                if not df.empty:
-                    st.dataframe(df[["entry_time", "exit_time", "result", "pnl", "rr_achieved"]], use_container_width=True)
+            with tab2: render_equity_curve(data)
+            with tab3: render_drawdown(data)
+            with tab4: render_trade_log(data)
+            with tab5: render_monte_carlo(data)
+
+            st.divider()
+            render_vbt_metrics(data)
+
+            st.divider()
+            st.markdown("### 🔍 Friction Impact")
+            fc1, fc2, fc3 = st.columns(3)
+            fc1.metric("Return WITH Friction", f"{m.get('total_return_pct', 0)}%")
+            fc2.metric("Return WITHOUT Friction", f"{m.get('return_without_friction', 0)}%")
+            hidden_cost = m.get("total_friction_cost", 0)
+            hidden_delta = round(m.get("return_without_friction", 0) - m.get("total_return_pct", 0), 2)
+            fc3.metric("Hidden Cost", f"₹{hidden_cost:,.0f}", delta=f"-{hidden_delta}%", delta_color="inverse")
 
             summary = f"✅ Tested **{data['strategy_name']}** on **{data['ticker']}**. Return: {m['total_return_pct']}%."
             st.session_state.messages.append({"role": "assistant", "content": summary})
+
+            st.markdown("##### 💡 Suggested Next Steps")
+            ac1, ac2, ac3 = st.columns(3)
+            if ac1.button("Try on 15m", key=f"btn_15m_{prompt}"):
+                st.session_state.prefill = f"{prompt} on 15m timeframe"
+                st.rerun()
+            if ac2.button("Try on Nifty", key=f"btn_nifty_{prompt}"):
+                st.session_state.prefill = f"{prompt} on nifty"
+                st.rerun()
+            if ac3.button("Change Asset", key=f"btn_asset_{prompt}"):
+                st.session_state.prefill = f"{prompt} but change the asset"
+                st.rerun()

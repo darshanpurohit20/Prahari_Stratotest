@@ -6,6 +6,7 @@ import json
 import os
 import hashlib
 from typing import Any
+from threading import Lock
 from google import genai
 from google.genai import types
 from agent.prompts import SYSTEM_PROMPT, AI_STRATEGIST_PROMPT
@@ -31,49 +32,99 @@ def _get_cache_path(key_data: str, prefix: str) -> str:
     return os.path.join(LLM_CACHE_DIR, f"{prefix}_{h}.json")
 
 # ── Load API Key from Environment ────────────────────────────
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+def _parse_csv_env(value: str) -> list[str]:
+    if not value:
+        return []
+    return [v.strip() for v in value.split(",") if v.strip()]
 
-# Initialize client globally
-client = None
-if GEMINI_API_KEY:
-    client = genai.Client(api_key=GEMINI_API_KEY)
-else:
-    print("[parser.py] WARNING: GEMINI_API_KEY is not set.")
+
+def _load_api_keys() -> list[str]:
+    # Preferred: GEMINI_API_KEYS="key1,key2,key3"
+    keys = _parse_csv_env(os.getenv("GEMINI_API_KEYS", ""))
+    if keys:
+        return keys
+
+    # Backward-compatible: GEMINI_API_KEY can also be comma-separated
+    return _parse_csv_env(os.getenv("GEMINI_API_KEY", ""))
+
+
+def _load_model_fallbacks() -> list[str]:
+    # Optional override via env: GEMINI_MODELS="gemini-2.5-flash,gemini-2.0-flash"
+    env_models = _parse_csv_env(os.getenv("GEMINI_MODELS", ""))
+    if env_models:
+        return env_models
+
+    # Default broad fallback chain
+    return [
+    "gemini-2.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-exp",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+]
+
+
+API_KEYS = _load_api_keys()
+FALLBACK_MODELS = _load_model_fallbacks()
+
+# Initialize client pool globally (round-robin)
+CLIENTS = [genai.Client(api_key=key) for key in API_KEYS]
+_client_lock = Lock()
+_client_index = 0
+
+if not CLIENTS:
+    print("[parser.py] WARNING: GEMINI_API_KEYS / GEMINI_API_KEY is not set.")
+
+
+def _next_client() -> tuple[Any, int]:
+    """Round-robin client selection across configured API keys."""
+    global _client_index
+    if not CLIENTS:
+        raise RuntimeError("No Gemini API keys configured. Set GEMINI_API_KEYS (comma-separated) or GEMINI_API_KEY.")
+
+    with _client_lock:
+        idx = _client_index % len(CLIENTS)
+        _client_index = (_client_index + 1) % len(CLIENTS)
+    return CLIENTS[idx], idx
 
 async def _generate_with_fallback(contents, config=None, is_parser=False):
     """
     Tries multiple Gemini models in sequence to mitigate rate limits.
     """
-    models = [
-        "gemini-2.5-flash"
-    ]
+    models = FALLBACK_MODELS
     last_err = None
 
-    for model_name in models:
-        try:
-            print(f"[parser.py] Attempting generation with {model_name}...")
-            if is_parser and config:
-                response = await client.aio.models.generate_content(
-                    model=model_name,
-                    contents=contents,
-                    config=config
-                )
-            else:
-                response = await client.aio.models.generate_content(
-                    model=model_name,
-                    contents=contents
-                )
-            
-            if response and response.text:
-                return response.text.strip()
-        except Exception as e:
-            print(f"[parser.py] Model {model_name} failed: {e}")
-            last_err = e
-            if "429" not in str(e) and "RESOURCE_EXHAUSTED" not in str(e):
-                # If it's not a rate limit, maybe it's a prompt issue? 
-                # Keep trying other models just in case, or break if it's fatal.
-                pass
-            continue
+    if not CLIENTS:
+        raise RuntimeError("No Gemini clients available. Configure GEMINI_API_KEYS or GEMINI_API_KEY.")
+
+    # Try each key (round-robin start) and each model before failing.
+    for _ in range(len(CLIENTS)):
+        client, client_idx = _next_client()
+        for model_name in models:
+            try:
+                print(f"[parser.py] Attempting generation with key#{client_idx + 1} model={model_name}...")
+                if is_parser and config:
+                    response = await client.aio.models.generate_content(
+                        model=model_name,
+                        contents=contents,
+                        config=config
+                    )
+                else:
+                    response = await client.aio.models.generate_content(
+                        model=model_name,
+                        contents=contents
+                    )
+
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                print(f"[parser.py] key#{client_idx + 1} model={model_name} failed: {e}")
+                last_err = e
+                continue
             
     raise last_err
 
@@ -88,60 +139,75 @@ async def agentic_backtest(request_data: Any) -> Any:
     tools = get_gemini_tools()
     
     try:
-        chat = client.aio.chats.create(
-            model='gemini-2.0-flash', 
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT + "\n\nCRITICAL: You are in DEEP AGENT mode. "
-                "1. ALWAYS call 'get_market_regime' first to understand the context. "
-                "2. Use 'run_backtest' to verify your strategy. "
-                "3. If results are poor (Win Rate < 50%), refine and test again. "
-                "4. Once satisfied, output the final JSON and stop calling tools.",
-                tools=tools
-            )
-        )
-        
-        response = await chat.send_message(user_input)
-        
-        # Multi-Turn Loop (Max 5 turns)
-        for _ in range(5):
-            parts = response.candidates[0].content.parts
-            # Check if there's a function call
-            f_calls = [p.function_call for p in parts if p.function_call]
-            
-            if not f_calls:
-                break # No more tools, we have the final answer
-                
-            # Handle each function call (usually one at a time)
-            tool_responses = []
-            for fc in f_calls:
-                print(f"[agent] AI calling tool: {fc.name} with {fc.args}")
-                
-                # Route tool calls
-                if fc.name == "run_backtest":
-                    res = await run_backtest_tool(**fc.args)
-                elif fc.name == "get_market_regime":
-                    res = await get_market_regime_tool(**fc.args)
-                elif fc.name == "check_optimizations":
-                    res = check_optimizations_tool(**fc.args)
-                else:
-                    res = "Unknown tool."
+        if not CLIENTS:
+            raise RuntimeError("No Gemini clients available. Configure GEMINI_API_KEYS or GEMINI_API_KEY.")
 
-                tool_responses.append(
-                    types.Part(
-                        function_response=types.FunctionResponse(
-                            name=fc.name,
-                            response={"result": res}
+        last_err = None
+        for _ in range(len(CLIENTS)):
+            client, client_idx = _next_client()
+            for model_name in FALLBACK_MODELS:
+                try:
+                    print(f"[agent] Starting deep-agent with key#{client_idx + 1} model={model_name}...")
+                    chat = client.aio.chats.create(
+                        model=model_name,
+                        config=types.GenerateContentConfig(
+                            system_instruction=SYSTEM_PROMPT + "\n\nCRITICAL: You are in DEEP AGENT mode. "
+                            "1. ALWAYS call 'get_market_regime' first to understand the context. "
+                            "2. Use 'run_backtest' to verify your strategy. "
+                            "3. If results are poor (Win Rate < 50%), refine and test again. "
+                            "4. Once satisfied, output the final JSON and stop calling tools.",
+                            tools=tools
                         )
                     )
-                )
-            
-            # Send results back to AI
-            response = await chat.send_message(types.Content(parts=tool_responses))
-        
-        # Final Parse
-        raw_json = response.text.strip()
-        parsed = json.loads(raw_json)
-        return _normalize(parsed)
+
+                    response = await chat.send_message(user_input)
+
+                    # Multi-Turn Loop (Max 5 turns)
+                    for _ in range(5):
+                        parts = response.candidates[0].content.parts
+                        # Check if there's a function call
+                        f_calls = [p.function_call for p in parts if p.function_call]
+
+                        if not f_calls:
+                            break # No more tools, we have the final answer
+
+                        # Handle each function call (usually one at a time)
+                        tool_responses = []
+                        for fc in f_calls:
+                            print(f"[agent] AI calling tool: {fc.name} with {fc.args}")
+
+                            # Route tool calls
+                            if fc.name == "run_backtest":
+                                res = await run_backtest_tool(**fc.args)
+                            elif fc.name == "get_market_regime":
+                                res = await get_market_regime_tool(**fc.args)
+                            elif fc.name == "check_optimizations":
+                                res = check_optimizations_tool(**fc.args)
+                            else:
+                                res = "Unknown tool."
+
+                            tool_responses.append(
+                                types.Part(
+                                    function_response=types.FunctionResponse(
+                                        name=fc.name,
+                                        response={"result": res}
+                                    )
+                                )
+                            )
+
+                        # Send results back to AI
+                        response = await chat.send_message(types.Content(parts=tool_responses))
+
+                    # Final Parse
+                    raw_json = response.text.strip()
+                    parsed = json.loads(raw_json)
+                    return _normalize(parsed)
+                except Exception as e:
+                    print(f"[agent] key#{client_idx + 1} model={model_name} failed: {e}")
+                    last_err = e
+                    continue
+
+        raise last_err
 
     except Exception as e:
         print(f"[parser.py] Agentic Loop failed: {e}")
