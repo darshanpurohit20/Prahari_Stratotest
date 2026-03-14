@@ -1,7 +1,3 @@
-# frontend/app.py
-# Streamlit frontend — calls FastAPI backend
-# Run: streamlit run frontend/app.py
-
 import streamlit as st
 import requests
 import pandas as pd
@@ -11,14 +7,69 @@ API_URL = "http://localhost:8000/api/v1"
 
 # ── Page config ───────────────────────────────────────────────
 st.set_page_config(
-    page_title="Prahari — AI Backtester",
-    page_icon="📊",
-    layout="wide"
+    page_title="Prahari AI — Agentic Backtesting",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
+# ── Custom Theme Injection (From your HTML) ─────────────────────
+st.markdown("""
+<style>
+    /* Core palette and fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+    
+    .stApp {
+        background-color: #080c18;
+        color: #e4e8f5;
+        font-family: 'DM Sans', sans-serif;
+    }
+    /* Hide top header bar & standard padding */
+    header[data-testid="stHeader"] { background: rgba(8,12,24,0.92) !important; backdrop-filter: blur(16px); }
+    .css-18e3th9, .block-container { padding-top: 2rem !important; }
+    
+    /* Typography */
+    h1, h2, h3 { font-family: 'Space Mono', monospace !important; font-weight: 700 !important; }
+    .hero-title {
+        font-size: clamp(32px, 6vw, 68px);
+        font-weight: 700;
+        line-height: 1.1;
+        text-align: center;
+        color: #e4e8f5;
+        font-family: 'Space Mono', monospace;
+    }
+    .hero-title span {
+        background: linear-gradient(135deg, #00d4ff, #5b5ef4 55%, #a855f7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .hero-subtitle {
+        text-align: center; color: #6b7494; font-size: 18px; margin-bottom: 40px; max-width: 600px; margin-left: auto; margin-right: auto;
+    }
+    
+    /* Layout & Cards */
+    .metric-card {
+        background-color: #0c1120; border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 12px; padding: 20px; text-align: center; font-family: 'Space Mono', monospace;
+    }
+    .metric-value { font-size: 32px; font-weight: 700; color: #00d4ff; }
+    .metric-label { font-size: 12px; color: #6b7494; text-transform: uppercase; letter-spacing: 1px; }
+    
+    /* Buttons */
+    .stButton > button {
+        background: linear-gradient(135deg, #5b5ef4, #7c3aed);
+        border: none; border-radius: 10px; color: white !important; font-weight: 600; font-family: 'DM Sans', sans-serif;
+        padding: 0.5rem 1rem; transition: all 0.2s; width: 100%;
+    }
+    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(91,94,244,0.4); }
+    
+    .logo-hdr { font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700; color: #00d4ff; letter-spacing: 3px; }
+    .logo-hdr span { color: #5b5ef4; }
+</style>
+""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-# CHART FUNCTIONS — defined first so they can be called below
+# CHART FUNCTIONS (Intact exactly as Streamlit)
 # ══════════════════════════════════════════════════════════════
 
 def render_price_chart(data):
@@ -27,455 +78,200 @@ def render_price_chart(data):
     trades     = data["trades"]
     indicators = data["indicators"]
 
-    # Create subplots: Price (row 1) and Volume (row 2)
-    fig = make_subplots(
-        rows=2, cols=1, 
-        shared_xaxes=True, 
-        vertical_spacing=0.03, 
-        row_heights=[0.8, 0.2]
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
+
+    times, opens, highs, lows, closs, vols = (
+        [c["time"] for c in candles], [c["open"] for c in candles], [c["high"] for c in candles],
+        [c["low"] for c in candles], [c["close"] for c in candles], [c["volume"] for c in candles]
     )
 
-    times  = [c["time"]  for c in candles]
-    opens  = [c["open"]  for c in candles]
-    highs  = [c["high"]  for c in candles]
-    lows   = [c["low"]   for c in candles]
-    closs  = [c["close"] for c in candles]
-    vols   = [c["volume"] for c in candles]
+    fig.add_trace(go.Candlestick(x=times, open=opens, high=highs, low=lows, close=closs, name="Price", increasing_line_color="#00e5a0", decreasing_line_color="#ff4560"), row=1, col=1)
+    
+    vol_colors = ["#00e5a0" if closs[i] >= opens[i] else "#ff4560" for i in range(len(closs))]
+    fig.add_trace(go.Bar(x=times, y=vols, name="Volume", marker_color=vol_colors, opacity=0.4), row=2, col=1)
 
-    # 1. Candlestick
-    fig.add_trace(go.Candlestick(
-        x=times, open=opens, high=highs, low=lows, close=closs,
-        name="Price",
-        increasing_line_color="#26a69a",
-        decreasing_line_color="#ef5350"
-    ), row=1, col=1)
-
-    # 2. Volume Bars
-    vol_colors = ["#26a69a" if closs[i] >= opens[i] else "#ef5350" for i in range(len(closs))]
-    fig.add_trace(go.Bar(
-        x=times, y=vols, 
-        name="Volume", 
-        marker_color=vol_colors,
-        opacity=0.4
-    ), row=2, col=1)
-
-    # 3. Indicator lines
-    colors = ["#ff9800", "#2196f3", "#9c27b0", "#e91e63"]
+    colors = ["#f59e0b", "#5b5ef4", "#00d4ff", "#a855f7"]
     for idx, (name, series) in enumerate(indicators.items()):
         if series:
-            fig.add_trace(go.Scatter(
-                x   =[s["time"]  for s in series],
-                y   =[s["value"] for s in series],
-                name=name,
-                line=dict(color=colors[idx % len(colors)], width=1.2)
-            ), row=1, col=1)
+            fig.add_trace(go.Scatter(x=[s["time"] for s in series], y=[s["value"] for s in series], name=name, line=dict(color=colors[idx % len(colors)], width=1.2)), row=1, col=1)
 
-    # 4. Professional Trade Annotations
     if trades:
         for t in trades:
-            # Entry
-            fig.add_annotation(
-                x=t["entry_time"], y=t["entry_price"],
-                text="B", showarrow=True, arrowhead=1, ax=0, ay=25,
-                bgcolor="#26a69a", font=dict(color="white", size=10),
-                row=1, col=1
-            )
-            # Exit
-            color = "#26a69a" if t["result"] == "win" else "#ef5350"
-            fig.add_annotation(
-                x=t["exit_time"], y=t["exit_price"],
-                text="S", showarrow=True, arrowhead=1, ax=0, ay=-25,
-                bgcolor=color, font=dict(color="white", size=10),
-                row=1, col=1
-            )
+            fig.add_annotation(x=t["entry_time"], y=t["entry_price"], text="B", showarrow=True, arrowhead=1, ax=0, ay=25, bgcolor="#00e5a0", font=dict(color="black", size=10), row=1, col=1)
+            color = "#00e5a0" if t["result"] == "win" else "#ff4560"
+            fig.add_annotation(x=t["exit_time"], y=t["exit_price"], text="S", showarrow=True, arrowhead=1, ax=0, ay=-25, bgcolor=color, font=dict(color="white", size=10), row=1, col=1)
 
-    fig.update_layout(
-        template="plotly_dark",
-        height=600,
-        xaxis_rangeslider_visible=False,
-        title=f"<b>{data['ticker']}</b> | {data['timeframe']} | {data['strategy_name']}",
-        margin=dict(l=10, r=10, t=50, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    # Hide volume axis labels
-    fig.update_yaxes(title_text="Price", row=1, col=1)
-    fig.update_yaxes(title_text="Vol", row=2, col=1)
-    
+    fig.update_layout(template="plotly_dark", height=500, xaxis_rangeslider_visible=False, title=f"<span style='color:#00d4ff'>{data['ticker']}</span> | {data['timeframe']}", margin=dict(l=10, r=10, t=50, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, use_container_width=True)
-
 
 def render_equity_curve(data):
     curve = data["equity_curve"]
-    if not curve:
-        st.info("No equity data")
-        return
+    if not curve: return
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x   =[e["time"]  for e in curve],
-        y   =[e["value"] for e in curve],
-        fill="tozeroy",
-        fillcolor="rgba(38,166,154,0.15)",
-        line=dict(color="#26a69a", width=2),
-        name="Portfolio Value (Original)"
-    ))
-    
-    # ── Agentic Tweak Comparison ────────────────────────────
-    if data.get("optimization_results") and "equity_curve" in data["optimization_results"]:
-        opt = data["optimization_results"]
-        # Use the same index as original for alignment
-        fig.add_trace(go.Scatter(
-            x=[e["time"] for e in curve[:len(opt["equity_curve"])]],
-            y=opt["equity_curve"],
-            line=dict(color="#ffa726", width=2, dash="dot"),
-            name="🤖 Agent Tweak (Optimized)"
-        ))
-
-    fig.update_layout(
-        template="plotly_dark", height=350,
-        title="💰 Equity Curve Comparison",
-        yaxis_title="Portfolio Value (₹)"
-    )
-
-    # Add vbt comparison if available
-    vbt = data.get("vbt_analytics")
-    if vbt and vbt.get("vbt_equity_curve"):
-        veq = vbt["vbt_equity_curve"]
-        fig.add_trace(go.Scatter(
-            x=[v["time"] for v in veq],
-            y=[v["value"] for v in veq],
-            line=dict(color="#9e9e9e", width=1, dash="dash"),
-            name="vectorbt Engine"
-        ))
-
+    fig.add_trace(go.Scatter(x=[e["time"] for e in curve], y=[e["value"] for e in curve], fill="tozeroy", fillcolor="rgba(0,229,160,0.15)", line=dict(color="#00e5a0", width=2), name="Strategy Value"))
+    fig.update_layout(template="plotly_dark", height=350, title="Equity Curve", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, use_container_width=True)
-
 
 def render_drawdown(data):
     curve = data["drawdown_curve"]
-    if not curve:
-        st.info("No drawdown data")
-        return
+    if not curve: return
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x   =[e["time"]  for e in curve],
-        y   =[e["value"] for e in curve],
-        fill="tozeroy",
-        fillcolor="rgba(239,83,80,0.2)",
-        line=dict(color="#ef5350", width=1.5),
-        name="Drawdown %"
-    ))
-    fig.update_layout(
-        template="plotly_dark", height=350,
-        title="📉 Drawdown Chart",
-        yaxis_title="Drawdown %"
-    )
+    fig.add_trace(go.Scatter(x=[e["time"] for e in curve], y=[e["value"] for e in curve], fill="tozeroy", fillcolor="rgba(255,69,96,0.2)", line=dict(color="#ff4560", width=1.5), name="Drawdown %"))
+    fig.update_layout(template="plotly_dark", height=350, title="Drawdown Curve", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, use_container_width=True)
 
-
-def render_trade_log(data):
-    trades = data["trades"]
-    if not trades:
-        st.info("No trades generated")
-        return
-    df = pd.DataFrame(trades)
-    df["result"] = df["result"].apply(
-        lambda x: "✅ WIN" if x == "win" else "❌ LOSS"
-    )
-    df["pnl"] = df["pnl"].apply(lambda x: f"₹{x:,.2f}")
-    st.dataframe(df[[
-        "trade_number", "entry_time", "exit_time",
-        "entry_price", "exit_price", "sl_price", "tp_price",
-        "result", "pnl", "rr_achieved"
-    ]], use_container_width=True)
-
-
-def render_monte_carlo(data):
-    vbt = data.get("vbt_analytics")
-    if not vbt or not vbt.get("monte_carlo"):
-        st.info("No Monte Carlo simulation data available")
-        return
-
-    mc = vbt["monte_carlo"]
-    p10, p50, p90 = mc["p10"], mc["p50"], mc["p90"]
-    steps = list(range(len(p50)))
-
-    fig = go.Figure()
-
-    # Fill between p10 and p90
-    fig.add_trace(go.Scatter(
-        x=steps + steps[::-1],
-        y=p90 + p10[::-1],
-        fill='toself',
-        fillcolor='rgba(38,166,154,0.1)',
-        line=dict(color='rgba(255,255,255,0)'),
-        hoverinfo="skip",
-        showlegend=False,
-        name='P10-P90 Range'
-    ))
-
-    fig.add_trace(go.Scatter(x=steps, y=p50, line=dict(color='#26a69a', width=3), name='P50 (Median)'))
-    fig.add_trace(go.Scatter(x=steps, y=p90, line=dict(color='#26a69a', width=1, dash='dot'), name='P90 (Best)'))
-    fig.add_trace(go.Scatter(x=steps, y=p10, line=dict(color='#ef5350', width=1, dash='dot'), name='P10 (Worst)'))
-
-    fig.update_layout(
-        template="plotly_dark", height=400,
-        title=f"🎲 Monte Carlo Simulation ({mc['n_sims']} iterations)",
-        xaxis_title="Days",
-        yaxis_title="Projected Capital (₹)"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_vbt_metrics(data):
-    vbt = data.get("vbt_analytics")
-    if not vbt:
-        return
-
-    st.markdown("### 🧬 Institutional Analytics (Powered by vectorbt)")
-    
-    # Advanced Metrics Grid
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Sortino Ratio", vbt.get("sortino_ratio") or "0.0")
-    c2.metric("Profit Factor", vbt.get("profit_factor") or "0.0", help="Gross Profit / Gross Loss")
-    c3.metric("Expectancy", f"₹{vbt.get('expectancy', 0):,.2f}")
-    c4.metric("Avg Duration", f"{vbt.get('avg_trade_duration', 0)} bars")
-
-    bc1, bc2, bc3, bc4 = st.columns(4)
-    bc1.metric("Recovery Factor", vbt.get("recovery_factor") or "0.0", help="Total Profit / Max Drawdown (abs)")
-    bc2.metric("Max DD % (vbt)", f"{vbt.get('max_drawdown_pct', 0)}%")
-    bc3.metric("Max DD Duration", f"{vbt.get('max_dd_duration', 0)} bars")
-    bc4.metric("Omega Ratio", vbt.get("omega_ratio") or "0.0")
-
-    bc1, bc2 = st.columns(2)
-    bc1.metric("Best Trade %", f"{vbt.get('best_trade_pct', 0)}%", delta_color="normal")
-    bc2.metric("Worst Trade %", f"{vbt.get('worst_trade_pct', 0)}%", delta_color="inverse")
-
-
 # ══════════════════════════════════════════════════════════════
-# MAIN UI
+# APP STATE
 # ══════════════════════════════════════════════════════════════
+if "page" not in st.session_state:
+    st.session_state.page = "landing"
+if "market" not in st.session_state:
+    st.session_state.market = "Crypto"
+if "symbol" not in st.session_state:
+    st.session_state.symbol = "BTC-USD"
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "prefill" not in st.session_state:
+    st.session_state.prefill = ""
 
-# ── Header ────────────────────────────────────────────────────
-st.markdown("# 📊 Prahari — Agentic AI Backtesting")
-st.markdown("*Describe your trading strategy in plain English. Get results in seconds.*")
+# Keep a top banner consistently
+st.markdown("<div class='logo-hdr'>PRAHARI<span>.</span>AI ⚡</div>", unsafe_allow_html=True)
 st.divider()
 
-# ── Sidebar ───────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("### 🛠️ Controls")
-    if st.button("🗑️ Clear Chat Session", use_container_width=True):
-        st.session_state["messages"] = []
-        st.session_state["prefill"] = None
+# ══════════════════════════════════════════════════════════════
+# PAGE: LANDING (Matches HTML Landing + Search)
+# ══════════════════════════════════════════════════════════════
+if st.session_state.page == "landing":
+    
+    st.markdown('<div class="hero-title">Backtest any strategy<br>in <span>plain English</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subtitle">Describe your trading strategy, pick a market, and get a professional performance tearsheet in seconds. No coding required.</div>', unsafe_allow_html=True)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown("<div class='metric-card'><div class='metric-value'>2.8M+</div><div class='metric-label'>Backtests</div></div>", unsafe_allow_html=True)
+    c2.markdown("<div class='metric-card'><div class='metric-value'>300+</div><div class='metric-label'>Instruments</div></div>", unsafe_allow_html=True)
+    c3.markdown("<div class='metric-card'><div class='metric-value'><4s</div><div class='metric-label'>Avg Time</div></div>", unsafe_allow_html=True)
+    c4.markdown("<div class='metric-card'><div class='metric-value'>10Y</div><div class='metric-label'>Data Depth</div></div>", unsafe_allow_html=True)
+    
+    st.write("")
+    st.write("")
+    
+    st.markdown("### 1. Select Market & Asset")
+    colA, colB = st.columns(2)
+    with colA:
+        market = st.selectbox("Market Category", ["Crypto", "Indian Equities", "Forex Base"], index=0)
+    with colB:
+        if market == "Crypto":
+            symbol = st.selectbox("Asset Symbol", ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD"])
+        elif market == "Indian Equities":
+            symbol = st.selectbox("Asset Symbol", ["RELIANCE", "TCS", "NIFTY50", "HDFCBANK", "INFY"])
+        else:
+            symbol = st.selectbox("Asset Symbol", ["EUR-USD", "GBP-USD", "USD-JPY", "AUD-USD"])
+            
+    st.write("")
+    
+    if st.button("🚀 Enter Dashboard & Start Chat", use_container_width=True):
+        st.session_state.market = market
+        st.session_state.symbol = symbol
+        st.session_state.page = "dashboard"
+        st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# PAGE: DASHBOARD (The Streamlit Chat + Charts Core)
+# ══════════════════════════════════════════════════════════════
+elif st.session_state.page == "dashboard":
+    
+    l_col, r_col = st.columns([1, 6])
+    with l_col:
+        if st.button("← Back"):
+            st.session_state.page = "landing"
+            st.rerun()
+    with r_col:
+        st.markdown(f"### Trade Dashboard: `{st.session_state.symbol}` ({st.session_state.market})")
+
+    st.sidebar.markdown("### 🛠️ Controls")
+    if st.sidebar.button("🗑️ Clear Chat Session", use_container_width=True):
+        st.session_state.messages = []
         st.rerun()
         
-    st.divider()
-    st.markdown("### 🚀 Fast Presets")
-    st.header("⚙️ Status")
-    
-    # API status check
-    try:
-        r = requests.get(f"{API_URL}/health", timeout=2)
-        if r.status_code == 200:
-            st.success("✅ API Connected")
-        else:
-            st.error("❌ API Error")
-    except:
-        st.error("❌ API Offline")
-
-    st.divider()
-    st.markdown("**📋 Quick Strategies**")
-    st.caption("Click to prefill — edit and submit")
-
+    st.sidebar.divider()
+    st.sidebar.markdown("### 🚀 Fast Presets")
     examples = [
-        ("MA Crossover",  "Buy when 50 EMA crosses above 200 EMA, SL below last swing low, 1:2 RR"),
-        ("RSI Reversal",  "Buy when RSI drops below 30 and bounces back, SL below swing low, 1:2 RR"),
-        ("Order Block",   "Buy at bullish order block, SL below the OB, 1:3 RR"),
-        ("FVG Entry",     "Buy when price fills bullish fair value gap, SL below FVG, 1:2 RR"),
+        ("MA Crossover", "Buy when 50 EMA crosses above 200 EMA, SL below last swing low, 1:2 RR"),
+        ("RSI Reversal", "Buy when RSI drops below 30 and bounces back, SL below swing low, 1:2 RR")
     ]
-
     for label, example in examples:
-        if st.button(label, use_container_width=True):
-            st.session_state["prefill"] = example
+        if st.sidebar.button(label, use_container_width=True):
+            st.session_state.prefill = example
 
-# ── Session state init ────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state["messages"] = []
-if "prefill" not in st.session_state:
-    st.session_state["prefill"] = ""
+    # Display Chat
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
 
-# ── Display chat history ──────────────────────────────────────
-for msg in st.session_state["messages"]:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
+    prefill = st.session_state.get("prefill", "")
+    if prefill:
+        st.session_state.prefill = ""
 
-# ── Strategy input ────────────────────────────────────────────
-prefill = st.session_state.get("prefill", "")
-if prefill:
-    st.session_state["prefill"] = ""  # clear after reading
+    prompt = st.chat_input(placeholder='e.g. "Buy when the 50 MA crosses above 200 MA, 2% SL"')
+    if prefill and not prompt:
+        prompt = prefill
 
-prompt = st.chat_input(
-    placeholder="e.g. Buy when 50 EMA crosses above 200 EMA, SL below swing low, 1:2 RR"
-)
+    if prompt:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
 
-# Use prefill if a quick button was clicked
-if prefill and not prompt:
-    prompt = prefill
-
-# ── Run on submit ─────────────────────────────────────────────
-if prompt:
-    st.session_state["messages"].append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.write(prompt)
-
-    with st.chat_message("assistant"):
-
-        # Merged Step — Run backtest (includes parsing)
-        with st.spinner("🤖 AI is analyzing and backtesting your strategy..."):
-            try:
-                # Concatenate messages for context - but only last few to avoid confusion
-                history = st.session_state["messages"][-5:] # Last 5 messages for context
-                full_input = "\n".join([f"{m['role']}: {m['content']}" for m in history])
-                
-                bt_resp = requests.post(
-                    f"{API_URL}/backtest",
-                    json={
-                        "user_input":      full_input,
-                        "ticker":          "AUTO",
-                        "timeframe":       "1h",
-                        "period":          "1y",
+        with st.chat_message("assistant"):
+            with st.spinner("🤖 Agentic AI is building & running strategy..."):
+                try:
+                    history = st.session_state["messages"][-5:]
+                    full_input = "\n".join([f"{m['role']}: {m['content']}" for m in history])
+                    
+                    bt_resp = requests.post(f"{API_URL}/backtest", json={
+                        "user_input": full_input,
+                        "ticker": st.session_state.symbol,
+                        "timeframe": "1h",
+                        "period": "1y",
                         "initial_capital": 100000,
-                        "market":          "india_equity"
-                    },
-                    timeout=120 
-                )
-                
-                if bt_resp.status_code != 200:
-                    st.error(f"Backtest failed: {bt_resp.json().get('detail')}")
+                        "market": st.session_state.market.lower().replace(" ", "_")
+                    }, timeout=120)
+                    
+                    if bt_resp.status_code != 200:
+                        st.error(f"Backtest failed: {bt_resp.json().get('detail')}")
+                        st.stop()
+                    data = bt_resp.json()
+                    
+                    if data.get("clarification_needed"):
+                        st.session_state.messages.append({"role": "assistant", "content": data['question']})
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"Backend offline or err: {e}")
                     st.stop()
-                
-                data = bt_resp.json()
-                
-                # Handle Clarification Needed (Exit early and rerun)
-                if data.get("clarification_needed"):
-                    st.session_state["messages"].append({"role": "assistant", "content": data['question']})
-                    st.rerun()
-                
-                # Show parsed rules for transparency
-                if data.get("parsed_rules"):
-                    with st.expander("📋 AI's Interpretation (Logic Rules)"):
-                        st.json(data["parsed_rules"])
-                        
-            except Exception as e:
-                st.error(f"Backtest error: {e}")
+
+            if not data.get("metrics"):
+                st.info("No stats. Enter refinement.")
                 st.stop()
+                
+            # Key metrics header
+            m = data["metrics"]
+            st.markdown("### 📊 Performance Tearsheet")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.markdown(f"<div class='metric-card' style='border-color: #00e5a0;'><div class='metric-value' style='color:#00e5a0;'>{m.get('total_return_pct', 0)}%</div><div class='metric-label'>Total Return</div></div>", unsafe_allow_html=True)
+            c2.markdown(f"<div class='metric-card' style='border-color: #00d4ff;'><div class='metric-value' style='color:#00d4ff;'>{m.get('sharpe_ratio', 0)}</div><div class='metric-label'>Sharpe Ratio</div></div>", unsafe_allow_html=True)
+            c3.markdown(f"<div class='metric-card' style='border-color: #ff4560;'><div class='metric-value' style='color:#ff4560;'>{m.get('max_drawdown_pct', 0)}%</div><div class='metric-label'>Max Drawdown</div></div>", unsafe_allow_html=True)
+            c4.markdown(f"<div class='metric-card' style='border-color: #f59e0b;'><div class='metric-value' style='color:#f59e0b;'>{m.get('win_rate', 0)}%</div><div class='metric-label'>Win Rate</div></div>", unsafe_allow_html=True)
 
-        # ── Results Rendering (Only if NOT clarification) ────────
-        if not data.get("metrics"):
-            st.info("No backtest results yet. Please provide more details.")
-            st.stop()
+            st.write("")
+            tab1, tab2, tab3 = st.tabs(["📈 Price & Sub-Charts", "💰 Equity & Risk", "📋 Trade Log"])
+            with tab1: render_price_chart(data)
+            with tab2: 
+                render_equity_curve(data)
+                render_drawdown(data)
+            with tab3:
+                df = pd.DataFrame(data["trades"])
+                if not df.empty:
+                    st.dataframe(df[["entry_time", "exit_time", "result", "pnl", "rr_achieved"]], use_container_width=True)
 
-        # ── Warnings ──────────────────────────────────────────
-        for w in data.get("warnings", []):
-            st.warning(w)
-
-        # ── Confidence badge ──────────────────────────────────
-        conf = data.get("confidence", "medium")
-        conf_color = {"high": "🟢", "medium": "🟡", "low": "🔴"}.get(conf, "⚪")
-        st.caption(f"{conf_color} Confidence: {data.get('confidence_reason', 'Analysis complete')}")
-
-        # ── Market Environment Intelligence ───────────────────
-        if data.get("market_regime"):
-            st.markdown(f"""
-            <div style="background-color: #001219; border: 1px solid #005f73; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <span style="color: #94d2bd; font-weight: bold; font-size: 0.8em; letter-spacing: 1.2px;">🌐 AI MARKET INTELLIGENCE</span><br/>
-                <span style="color: #e9d8a6; font-size: 1.1em; font-weight: 500;">{data['market_regime']}</span>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # ── AI Strategist Insight ─────────────────────────────
-        if data.get("ai_insight"):
-            st.markdown(f"""
-            <div style="background-color: #1e1e1e; border-left: 5px solid #26a69a; padding: 20px; border-radius: 10px; margin-bottom: 25px;">
-                <h4 style='margin-top:0; color:#26a69a;'>💡 Strategist's Take</h4>
-                <p style='font-style: italic; color:#e0e0e0; font-size: 1.1em;'>"{data['ai_insight']}"</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        # ── COMPARATIVE OPTIMIZATION (The Tweak) ──────────────
-        if data.get("optimization_results"):
-            opt = data["optimization_results"]
-            st.markdown(f"""
-            <div style="background-color: #0d1b2a; border: 1px solid #415a77; padding: 20px; border-radius: 10px; margin-bottom: 25px;">
-                <h4 style='margin-top:0; color:#e0e1dd;'>🤖 Agent Optimization Found</h4>
-                <p style='color:#e0e1dd;'>{data.get("optimization_summary", "Better parameters detected.")}</p>
-                <div style="display: flex; gap: 20px;">
-                    <div>
-                        <span style="color:#778da9;">Original Win Rate</span><br/>
-                        <span style="font-size: 1.5em; font-weight: bold; color:#e0e0e0;">{m.get('win_rate')}%</span>
-                    </div>
-                    <div style="font-size: 2em; color:#415a77;">→</div>
-                    <div>
-                        <span style="color:#1b4332;">Optimized Win Rate</span><br/>
-                        <span style="font-size: 1.5em; font-weight: bold; color:#2d6a4f;">{opt['win_rate']}%</span>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # ── Key metrics ───────────────────────────────────────
-        st.markdown("### 📊 Performance Summary")
-        m = data["metrics"]
-        c1,c2,c3,c4 = st.columns(4)
-        c1.metric("Total Trades",  m.get("total_trades", 0))
-        c2.metric("Win Rate",      f"{m.get('win_rate', 0)}%")
-        c3.metric("Total Return",  f"{m.get('total_return_pct', 0)}%")
-        c4.metric("Annual Return", f"{m.get('annual_return_pct', 0)}%")
-
-        c5,c6,c7,c8 = st.columns(4)
-        c5.metric("Sharpe Ratio",  m.get("sharpe_ratio", 0))
-        c6.metric("Max Drawdown",  f"{m.get('max_drawdown_pct', 0)}%")
-        c7.metric("Profit Factor", m.get("profit_factor", 0))
-        c8.metric("Avg RR",        m.get("avg_rr_achieved", 0))
-
-        # ── Charts ────────────────────────────────────────────
-        st.divider()
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📈 Price Chart", "💰 Equity Curve", "📉 Drawdown", "📋 Trade Log", "🎲 Risk Analysis"
-        ])
-        with tab1: render_price_chart(data)
-        with tab2: render_equity_curve(data)
-        with tab3: render_drawdown(data)
-        with tab4: render_trade_log(data)
-        with tab5: render_monte_carlo(data)
-
-        # ── vectorbt metrics ──────────────────────────────────
-        st.divider()
-        render_vbt_metrics(data)
-
-        # ── Friction comparison ───────────────────────────────
-        st.divider()
-        st.markdown("### 🔍 Friction Impact (Reality vs Fantasy)")
-        fc1, fc2, fc3 = st.columns(3)
-        fc1.metric("Return WITH Friction", f"{m['total_return_pct']}%")
-        fc2.metric("Return WITHOUT Friction", f"{m['return_without_friction']}%")
-        fc3.metric("Hidden Cost", f"₹{m['total_friction_cost']:,.0f}", 
-                   delta=f"-{round(m['return_without_friction'] - m['total_return_pct'], 2)}%", delta_color="inverse")
-
-        # ── Assistant Summary in Chat ─────────────────────────
-        summary = (
-            f"✅ **{data['strategy_name']}** on {data['ticker']}\n"
-            f"📈 Return: **{m['total_return_pct']}%** | Sharpe: **{m['sharpe_ratio']}**"
-        )
-        st.session_state["messages"].append({"role": "assistant", "content": summary})
-        
-        st.markdown("##### 💡 Suggested Next Steps")
-        ac1, ac2, ac3 = st.columns(3)
-        if ac1.button("Try on 15m", key=f"btn_15m_{prompt}"):
-            st.session_state["prefill"] = f"{prompt} on 15m timeframe"
-            st.rerun()
-        if ac2.button("Try on Nifty", key=f"btn_nifty_{prompt}"):
-            st.session_state["prefill"] = f"{prompt} on nifty"
-            st.rerun()
-        if ac3.button("Change Asset", key=f"btn_asset_{prompt}"):
-            st.session_state["prefill"] = f"{prompt} but change the asset"
-            st.rerun()
+            summary = f"✅ Tested **{data['strategy_name']}** on **{data['ticker']}**. Return: {m['total_return_pct']}%."
+            st.session_state.messages.append({"role": "assistant", "content": summary})

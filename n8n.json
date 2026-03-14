@@ -1,0 +1,191 @@
+{
+  "name": "Prahari Telegram Backtest Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "telegram_trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [-900, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $json.message || {};\nconst text = (msg.text || '').trim();\nconst lower = text.toLowerCase();\n\nreturn [{\n  json: {\n    chatId: msg.chat?.id,\n    userText: text,\n    isHelp: lower === '/start' || lower === '/help',\n    username: msg.from?.username || msg.from?.first_name || 'there'\n  }\n}];"
+      },
+      "id": "parse_message",
+      "name": "Parse Incoming Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-650, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isHelp}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "check_help",
+      "name": "Is Help Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-400, 200]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{$json.chatId}}",
+        "text": "Hello {{$json.username}}\n\nSend me your trading strategy in plain English and I will run a Prahari backtest.\n\nExample:\nBuy when 50 EMA crosses above 200 EMA\nStop loss below swing low\nRisk reward 1:2"
+      },
+      "id": "send_help",
+      "name": "Send Help",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [-150, 80],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/backtest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { user_input: $json.userText, ticker: 'AUTO', timeframe: '1h', period: '1y', initial_capital: 100000, market: 'india_equity' } }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "call_api",
+      "name": "Call Prahari Backtest API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-150, 300]
+    },
+    {
+      "parameters": {
+        "mode": "combine"
+      },
+      "id": "merge_context",
+      "name": "Merge Context",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [100, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.clarification_needed }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "clarification_check",
+      "name": "Clarification Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [350, 250]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{$json.chatId}}",
+        "text": "={{ $json.question || 'Please provide more details like asset, timeframe and risk reward.' }}"
+      },
+      "id": "send_clarification",
+      "name": "Send Clarification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [600, 100],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json.metrics || {};\n\nlet text = `📊 Prahari Backtest Complete\\n\\n`;\ntext += `Strategy: ${$json.strategy_name || 'Strategy'}\\n`;\ntext += `Asset: ${$json.ticker || 'AUTO'} | TF: ${$json.timeframe || '1h'}\\n\\n`;\ntext += `Trades: ${m.total_trades ?? 0}\\n`;\ntext += `Win Rate: ${m.win_rate ?? 0}%\\n`;\ntext += `Return: ${m.total_return_pct ?? 0}%\\n`;\ntext += `Sharpe: ${m.sharpe_ratio ?? 0}\\n`;\ntext += `Max Drawdown: ${m.max_drawdown_pct ?? 0}%\\n`;\ntext += `Profit Factor: ${m.profit_factor ?? 0}\\n`;\n\nreturn [{ json: { chatId: $json.chatId, text } }];"
+      },
+      "id": "format_reply",
+      "name": "Format Telegram Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 380]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{$json.chatId}}",
+        "text": "={{$json.text}}"
+      },
+      "id": "send_result",
+      "name": "Send Backtest Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [850, 380],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Parse Incoming Message", "type": "main", "index": 0 }]]
+    },
+    "Parse Incoming Message": {
+      "main": [
+        [{ "node": "Is Help Command?", "type": "main", "index": 0 }],
+        [{ "node": "Merge Context", "type": "main", "index": 1 }]
+      ]
+    },
+    "Is Help Command?": {
+      "main": [
+        [{ "node": "Send Help", "type": "main", "index": 0 }],
+        [{ "node": "Call Prahari Backtest API", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call Prahari Backtest API": {
+      "main": [[{ "node": "Merge Context", "type": "main", "index": 0 }]]
+    },
+    "Merge Context": {
+      "main": [[{ "node": "Clarification Needed?", "type": "main", "index": 0 }]]
+    },
+    "Clarification Needed?": {
+      "main": [
+        [{ "node": "Send Clarification", "type": "main", "index": 0 }],
+        [{ "node": "Format Telegram Reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Telegram Reply": {
+      "main": [[{ "node": "Send Backtest Result", "type": "main", "index": 0 }]]
+    }
+  }
+}
