@@ -51,20 +51,29 @@ def _load_api_keys() -> list[str]:
 def _load_model_fallbacks() -> list[str]:
     # Optional override via env: GEMINI_MODELS="gemini-2.5-flash,gemini-2.0-flash"
     env_models = _parse_csv_env(os.getenv("GEMINI_MODELS", ""))
+    
     if env_models:
         return env_models
 
     # Default broad fallback chain
+    # Default broad fallback chain (Best → Worst)
     return [
-    "gemini-2.5-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-3-flash",
+
+    #🧠 Latest Gemini 3 Preview Models (Strong reasoning, but preview)
+
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+
+    #🚀 Gemini 2.5 (Most stable modern models)
+
     "gemini-2.5-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-exp",
-    "gemini-2.0-flash-lite",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
+
+
+    # 🧠 Legacy Gemini routing aliases
+
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+
 ]
 
 
