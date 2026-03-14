@@ -93,7 +93,8 @@ PERIOD_DAYS = {
 
 
 # ── Caching Config ───────────────────────────────────────────
-CACHE_DIR = os.path.join(os.getcwd(), ".cache", "data")
+
+CACHE_DIR = "/tmp/prahari_cache/data"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 def fetch_data(ticker: str, timeframe: str, period: str, market: str = "india_equity") -> pd.DataFrame:
